@@ -1,0 +1,17 @@
+{
+  "input": {
+    "pipeline_id": 1337,
+    "chunk_id": 1,
+    "video_name": "29_20260729181714.mp4",
+    "split_number": 1,
+    "chunk_number": 1,
+    "chunk_s3_bucket": "tau-research-video-chunks",
+    "chunk_s3_key": "chunks/sb-1337-29_20260729181714/split-01/chunk-01_29_20260729181714_frames-128-228.mp4",
+    "roi_1": 100,
+    "roi_2": 3700,
+    "output_s3_bucket": "tau-research-video-chunks",
+    "output_s3_prefix": "bud-results",
+    "save_output_videos": true,
+    "save_processed_frames": true
+  }
+}

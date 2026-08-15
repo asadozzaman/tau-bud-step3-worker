@@ -1,0 +1,7 @@
+MODEL_S3_BUCKET=your-private-model-bucket
+CANE_MODEL_S3_KEY=models/bud-step3/CaneY26V10.pt
+BUD_MODEL_S3_KEY=models/bud-step3/WinBudy12n.pt
+MALE_MODEL_S3_KEY=models/bud-step3/Male_Yolo_26_Final.pt
+OUTPUT_S3_BUCKET=tau-research-video-chunks
+OUTPUT_S3_PREFIX=bud-results
+AWS_REGION=us-east-1
