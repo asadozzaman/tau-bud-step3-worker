@@ -12,7 +12,10 @@ WORKDIR /app
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
+        build-essential \
         ffmpeg \
+        gcc \
+        g++ \
         git \
         libglib2.0-0 \
         libsm6 \
