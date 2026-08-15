@@ -61,6 +61,41 @@ def event_input(event):
     return event or {}
 
 
+def masked_env_status(name):
+    value = os.getenv(name)
+    if value is None:
+        return {"present": False, "length": 0, "preview": None}
+    stripped = value.strip()
+    if not stripped:
+        return {"present": True, "length": 0, "preview": ""}
+    if len(stripped) <= 8:
+        preview = f"{stripped[:2]}***"
+    else:
+        preview = f"{stripped[:4]}***{stripped[-4:]}"
+    return {"present": True, "length": len(stripped), "preview": preview}
+
+
+def boto3_credential_status():
+    try:
+        session = boto3.Session()
+        credentials = session.get_credentials()
+        if credentials is None:
+            return {"found": False, "method": None, "error": None}
+        frozen = credentials.get_frozen_credentials()
+        return {
+            "found": bool(frozen.access_key and frozen.secret_key),
+            "method": getattr(credentials, "method", None),
+            "access_key_preview": (
+                f"{frozen.access_key[:4]}***{frozen.access_key[-4:]}"
+                if frozen.access_key and len(frozen.access_key) > 8
+                else None
+            ),
+            "error": None,
+        }
+    except Exception as exc:
+        return {"found": False, "method": None, "error": str(exc)}
+
+
 def parse_s3_uri(uri):
     parsed = urlparse(str(uri))
     if parsed.scheme.lower() != "s3" or not parsed.netloc:
@@ -296,6 +331,14 @@ def handle_job(event):
                 "bud": (MODEL_DIR / "WinBudy12n.pt").is_file(),
                 "male": (MODEL_DIR / "Male_Yolo_26_Final.pt").is_file(),
             },
+            "aws_environment": {
+                "AWS_ACCESS_KEY_ID": masked_env_status("AWS_ACCESS_KEY_ID"),
+                "AWS_SECRET_ACCESS_KEY": masked_env_status("AWS_SECRET_ACCESS_KEY"),
+                "AWS_SESSION_TOKEN": masked_env_status("AWS_SESSION_TOKEN"),
+                "AWS_REGION": masked_env_status("AWS_REGION"),
+                "AWS_DEFAULT_REGION": masked_env_status("AWS_DEFAULT_REGION"),
+            },
+            "boto3_credentials": boto3_credential_status(),
             "cuda": cuda,
         }
 
