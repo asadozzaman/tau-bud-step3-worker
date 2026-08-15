@@ -274,6 +274,31 @@ def run_step3(payload, client, run_dir, input_video):
 
 def handle_job(event):
     payload = event_input(event)
+    if bool_value(payload.get("health_check"), False):
+        cuda = {"available": None, "device_count": None, "error": None}
+        try:
+            import torch
+
+            cuda["available"] = bool(torch.cuda.is_available())
+            cuda["device_count"] = int(torch.cuda.device_count())
+        except Exception as exc:
+            cuda["error"] = str(exc)
+
+        return {
+            "status": "OK",
+            "message": "Bud Step 3 worker is alive.",
+            "step3_script": str(STEP3_SCRIPT),
+            "step3_script_exists": STEP3_SCRIPT.is_file(),
+            "cutie_repo": str(CUTIE_REPO),
+            "cutie_repo_exists": CUTIE_REPO.is_dir(),
+            "models": {
+                "cane": (MODEL_DIR / "CaneY26V10.pt").is_file(),
+                "bud": (MODEL_DIR / "WinBudy12n.pt").is_file(),
+                "male": (MODEL_DIR / "Male_Yolo_26_Final.pt").is_file(),
+            },
+            "cuda": cuda,
+        }
+
     run_id = str(event.get("id") if isinstance(event, dict) and event.get("id") else uuid.uuid4())[:36]
     run_dir = TMP_ROOT / run_id
     input_dir = run_dir / "input"
