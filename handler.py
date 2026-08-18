@@ -412,6 +412,8 @@ def handle_job(event):
             "output_csv_s3_key": output_csv_key,
             "output_video_s3_key": output_video_key,
             "bud_only_output_video_s3_key": bud_only_key,
+            "database_output_field": "bud_only_output_video_s3_key",
+            "database_output_s3_key": bud_only_key,
             "processed_frames_s3_prefix": processed_frames_prefix,
             "log_s3_key": log_key,
             "output_video_preview_url": presigned_url(client, output_bucket, output_video_key),
