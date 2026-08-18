@@ -147,4 +147,6 @@ the request must use:
 
 Uploaded MP4 output videos are transcoded to browser-friendly H.264 with
 `yuv420p` pixel format before S3 upload so the Django dashboard can preview
-them in the HTML video player.
+them in the HTML video player. The worker prefers `/usr/bin/ffmpeg` from the
+Docker image because some Conda ffmpeg builds do not support the same encoder
+options.

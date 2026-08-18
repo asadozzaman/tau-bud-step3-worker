@@ -22,6 +22,7 @@ MODEL_DIR = Path(os.getenv("MODEL_DIR", "/models"))
 CUTIE_REPO = Path(os.getenv("CUTIE_REPO", "/opt/Cutie"))
 DEFAULT_ROI_HEIGHT = int(os.getenv("ROI_VIDEO_HEIGHT", "2160"))
 REQUIRED_CUDA_DEVICE_COUNT = int(os.getenv("REQUIRED_CUDA_DEVICE_COUNT", "2"))
+SYSTEM_FFMPEG = Path(os.getenv("SYSTEM_FFMPEG", "/usr/bin/ffmpeg"))
 
 MODEL_DEFAULTS = {
     "cane": ("CaneY26V10.pt", "CANE_MODEL_PATH", "CANE_MODEL_S3_KEY"),
@@ -205,51 +206,114 @@ def content_type_for(path):
     return content_type or "application/octet-stream"
 
 
+def ffmpeg_binary():
+    configured = os.getenv("FFMPEG_BIN")
+    candidates = [configured, str(SYSTEM_FFMPEG), shutil.which("ffmpeg")]
+
+    for candidate in candidates:
+        if not candidate:
+            continue
+        if Path(candidate).is_file():
+            return str(candidate)
+
+    return "ffmpeg"
+
+
+def ffmpeg_status():
+    binary = ffmpeg_binary()
+    status = {"binary": binary, "available": False, "version": None, "error": None}
+    try:
+        completed = subprocess.run(
+            [binary, "-version"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=10,
+        )
+        status["available"] = completed.returncode == 0
+        first_line = (completed.stdout or completed.stderr or "").splitlines()
+        status["version"] = first_line[0] if first_line else None
+        if completed.returncode != 0:
+            status["error"] = completed.stderr or completed.stdout or "ffmpeg returned a non-zero status."
+    except Exception as exc:
+        status["error"] = str(exc)
+    return status
+
+
+def append_transcode_log(log_path, title, cmd, completed):
+    if not log_path:
+        return
+    with Path(log_path).open("a", encoding="utf-8") as log_file:
+        log_file.write(f"\n{title}\n")
+        log_file.write(" ".join(cmd) + "\n")
+        log_file.write(completed.stdout or "")
+        log_file.write(completed.stderr or "")
+
+
 def transcode_mp4_for_browser(video_path, log_path=None):
     video_path = Path(video_path)
     if not video_path.is_file() or video_path.stat().st_size == 0:
         return False
 
     temp_path = video_path.with_name(f"{video_path.stem}_browser.mp4")
-    cmd = [
-        "ffmpeg",
-        "-y",
-        "-loglevel",
-        "error",
-        "-i",
-        str(video_path),
-        "-map",
-        "0:v:0",
-        "-map",
-        "0:a?",
-        "-c:v",
-        "libx264",
-        "-preset",
-        "veryfast",
-        "-crf",
-        "23",
-        "-pix_fmt",
-        "yuv420p",
-        "-c:a",
-        "aac",
-        "-movflags",
-        "+faststart",
-        str(temp_path),
+    binary = ffmpeg_binary()
+    command_variants = [
+        [
+            binary,
+            "-y",
+            "-loglevel",
+            "error",
+            "-i",
+            str(video_path),
+            "-map",
+            "0:v:0",
+            "-map",
+            "0:a?",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-movflags",
+            "+faststart",
+            str(temp_path),
+        ],
+        [
+            binary,
+            "-y",
+            "-loglevel",
+            "error",
+            "-i",
+            str(video_path),
+            "-map",
+            "0:v:0",
+            "-map",
+            "0:a?",
+            "-c:v",
+            "h264",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-movflags",
+            "+faststart",
+            str(temp_path),
+        ],
     ]
-    completed = subprocess.run(cmd, capture_output=True, text=True, check=False)
-    if completed.returncode != 0:
-        if log_path:
-            with Path(log_path).open("a", encoding="utf-8") as log_file:
-                log_file.write("\nBrowser MP4 transcode failed:\n")
-                log_file.write(" ".join(cmd) + "\n")
-                log_file.write(completed.stdout or "")
-                log_file.write(completed.stderr or "")
+
+    for index, cmd in enumerate(command_variants, start=1):
+        completed = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        if completed.returncode == 0:
+            temp_path.replace(video_path)
+            return True
+        append_transcode_log(log_path, f"Browser MP4 transcode attempt {index} failed:", cmd, completed)
         if temp_path.exists():
             temp_path.unlink()
-        return False
 
-    temp_path.replace(video_path)
-    return True
+    return False
 
 
 def upload_tree(client, local_root, bucket, prefix):
@@ -416,6 +480,7 @@ def handle_job(event):
             },
             "boto3_credentials": boto3_credential_status(),
             "cuda": cuda_status(),
+            "ffmpeg": ffmpeg_status(),
         }
 
     run_id = str(event.get("id") if isinstance(event, dict) and event.get("id") else uuid.uuid4())[:36]
