@@ -123,3 +123,28 @@ Returned keys include:
 - `processed_frames_s3_prefix`
 - `log_s3_key`
 - `output_video_preview_url`
+
+## Database Field
+
+If the backend/database should save only one final output path, save:
+
+```text
+bud_only_output_video_s3_key
+```
+
+The response also includes this alias for convenience:
+
+```text
+database_output_s3_key
+```
+
+Both fields point to the same bud-only diagnostic video. To receive this key,
+the request must use:
+
+```json
+"save_output_videos": true
+```
+
+Uploaded MP4 output videos are transcoded to browser-friendly H.264 with
+`yuv420p` pixel format before S3 upload so the Django dashboard can preview
+them in the HTML video player.

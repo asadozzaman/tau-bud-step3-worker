@@ -205,6 +205,53 @@ def content_type_for(path):
     return content_type or "application/octet-stream"
 
 
+def transcode_mp4_for_browser(video_path, log_path=None):
+    video_path = Path(video_path)
+    if not video_path.is_file() or video_path.stat().st_size == 0:
+        return False
+
+    temp_path = video_path.with_name(f"{video_path.stem}_browser.mp4")
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-loglevel",
+        "error",
+        "-i",
+        str(video_path),
+        "-map",
+        "0:v:0",
+        "-map",
+        "0:a?",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        "23",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-movflags",
+        "+faststart",
+        str(temp_path),
+    ]
+    completed = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if completed.returncode != 0:
+        if log_path:
+            with Path(log_path).open("a", encoding="utf-8") as log_file:
+                log_file.write("\nBrowser MP4 transcode failed:\n")
+                log_file.write(" ".join(cmd) + "\n")
+                log_file.write(completed.stdout or "")
+                log_file.write(completed.stderr or "")
+        if temp_path.exists():
+            temp_path.unlink()
+        return False
+
+    temp_path.replace(video_path)
+    return True
+
+
 def upload_tree(client, local_root, bucket, prefix):
     local_root = Path(local_root)
     uploaded = {}
@@ -391,6 +438,10 @@ def handle_job(event):
     try:
         download_s3_file(client, input_bucket, input_key, input_video)
         returncode, output_dir, paths = run_step3(payload, client, run_dir, input_video)
+        browser_encoded = {
+            "output_video": transcode_mp4_for_browser(paths["output_video"], paths["log_path"]),
+            "bud_only_output_video": transcode_mp4_for_browser(paths["output_bud_only_video"], paths["log_path"]),
+        }
         uploaded = upload_tree(client, output_dir, output_bucket, result_prefix)
 
         output_csv_key = uploaded.get(paths["output_csv"].relative_to(output_dir).as_posix())
@@ -414,6 +465,7 @@ def handle_job(event):
             "bud_only_output_video_s3_key": bud_only_key,
             "database_output_field": "bud_only_output_video_s3_key",
             "database_output_s3_key": bud_only_key,
+            "output_videos_browser_encoded": browser_encoded,
             "processed_frames_s3_prefix": processed_frames_prefix,
             "log_s3_key": log_key,
             "output_video_preview_url": presigned_url(client, output_bucket, output_video_key),
