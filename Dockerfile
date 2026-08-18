@@ -5,6 +5,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
     MODEL_DIR=/models \
     CUTIE_REPO=/opt/Cutie \
+    STEP3_SCRIPT=/app/Step_3_BudSpur_Combined_v14.py \
+    REQUIRED_CUDA_DEVICE_COUNT=2 \
     OUTPUT_S3_PREFIX=bud-results \
     SAVE_OUTPUT_VIDEOS=true
 
@@ -36,7 +38,7 @@ RUN git clone --depth 1 "${CUTIE_REPO_URL}" /opt/Cutie \
     && python -m pip install -e /opt/Cutie \
     && python /opt/Cutie/cutie/utils/download_models.py
 
-COPY Step_3_BudSpur_Combined_v3.py /app/Step_3_BudSpur_Combined_v3.py
+COPY Step_3_BudSpur_Combined_v14.py /app/Step_3_BudSpur_Combined_v14.py
 COPY handler.py /app/handler.py
 COPY examples /app/examples
 COPY models /models

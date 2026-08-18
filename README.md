@@ -1,10 +1,43 @@
 # RunPod Bud Step 3 Worker
 
-This worker runs `Step_3_BudSpur_Combined_v3.py` for one chunk video from S3.
+This worker runs `Step_3_BudSpur_Combined_v14.py` for one chunk video from S3.
 
 The Django pipeline should send one chunk at a time. The worker downloads the chunk,
 runs Step 3, uploads the output CSV, processed frames, log, and preview videos to S3,
 then returns the S3 keys for database tracking.
+
+## GPU Requirement
+
+This version is the dual-GPU Step 3 pipeline.
+
+RunPod Serverless must be configured with:
+
+```text
+GPUs per worker = 2
+```
+
+The Docker image, GitHub Actions, Docker Hub, S3 input/output, and payload flow stay
+the same as the previous worker. The important RunPod change is that one serverless
+worker must receive two CUDA GPUs at the same time.
+
+The health check reports:
+
+- `cuda.available`
+- `cuda.device_count`
+- `cuda.device_names`
+- `cuda.meets_requirement`
+
+For this worker, `cuda.meets_requirement` should be `true`.
+
+Health-check payload:
+
+```json
+{
+  "input": {
+    "health_check": true
+  }
+}
+```
 
 ## Required Payload
 
@@ -42,6 +75,10 @@ docker run --rm --gpus all `
   python /app/handler.py /app/examples/sample_payload.json
 ```
 
+The local Docker command also needs access to two GPUs if you want to run the full
+`v14` pipeline locally. A one-GPU machine can only build the image or run a health
+check that reports the missing GPU requirement.
+
 For RunPod production, use private S3 model storage instead of committing models to GitHub.
 Set these environment variables in RunPod:
 
@@ -55,6 +92,12 @@ AWS_SECRET_ACCESS_KEY
 AWS_REGION
 OUTPUT_S3_BUCKET
 OUTPUT_S3_PREFIX
+```
+
+In the RunPod endpoint settings, also set:
+
+```text
+GPUs per worker = 2
 ```
 
 ## Build Locally

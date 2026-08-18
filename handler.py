@@ -16,11 +16,12 @@ from botocore.exceptions import ClientError
 
 
 APP_DIR = Path(os.getenv("APP_DIR", "/app"))
-STEP3_SCRIPT = Path(os.getenv("STEP3_SCRIPT", APP_DIR / "Step_3_BudSpur_Combined_v3.py"))
+STEP3_SCRIPT = Path(os.getenv("STEP3_SCRIPT", APP_DIR / "Step_3_BudSpur_Combined_v14.py"))
 TMP_ROOT = Path(os.getenv("TMP_ROOT", "/tmp/bud_step3_jobs"))
 MODEL_DIR = Path(os.getenv("MODEL_DIR", "/models"))
 CUTIE_REPO = Path(os.getenv("CUTIE_REPO", "/opt/Cutie"))
 DEFAULT_ROI_HEIGHT = int(os.getenv("ROI_VIDEO_HEIGHT", "2160"))
+REQUIRED_CUDA_DEVICE_COUNT = int(os.getenv("REQUIRED_CUDA_DEVICE_COUNT", "2"))
 
 MODEL_DEFAULTS = {
     "cane": ("CaneY26V10.pt", "CANE_MODEL_PATH", "CANE_MODEL_S3_KEY"),
@@ -94,6 +95,35 @@ def boto3_credential_status():
         }
     except Exception as exc:
         return {"found": False, "method": None, "error": str(exc)}
+
+
+def cuda_status():
+    status = {
+        "available": None,
+        "device_count": None,
+        "device_names": [],
+        "required_device_count": REQUIRED_CUDA_DEVICE_COUNT,
+        "meets_requirement": False,
+        "error": None,
+    }
+
+    try:
+        import torch
+
+        status["available"] = bool(torch.cuda.is_available())
+        status["device_count"] = int(torch.cuda.device_count()) if status["available"] else 0
+        status["device_names"] = [
+            torch.cuda.get_device_name(index)
+            for index in range(int(status["device_count"]))
+        ]
+        status["meets_requirement"] = bool(
+            status["available"]
+            and int(status["device_count"]) >= REQUIRED_CUDA_DEVICE_COUNT
+        )
+    except Exception as exc:
+        status["error"] = str(exc)
+
+    return status
 
 
 def parse_s3_uri(uri):
@@ -244,6 +274,14 @@ def run_step3(payload, client, run_dir, input_video):
     if not STEP3_SCRIPT.is_file():
         raise FileNotFoundError(f"Step 3 script was not found: {STEP3_SCRIPT}")
 
+    cuda = cuda_status()
+    if not cuda["meets_requirement"]:
+        raise RuntimeError(
+            "Step 3 v14 requires at least "
+            f"{REQUIRED_CUDA_DEVICE_COUNT} CUDA GPUs in the same worker. "
+            f"Detected {cuda['device_count']} GPU(s); CUDA available: {cuda['available']}."
+        )
+
     save_output_videos = bool_value(
         payload.get("save_output_videos"),
         bool_value(os.getenv("SAVE_OUTPUT_VIDEOS"), True),
@@ -310,18 +348,9 @@ def run_step3(payload, client, run_dir, input_video):
 def handle_job(event):
     payload = event_input(event)
     if bool_value(payload.get("health_check"), False):
-        cuda = {"available": None, "device_count": None, "error": None}
-        try:
-            import torch
-
-            cuda["available"] = bool(torch.cuda.is_available())
-            cuda["device_count"] = int(torch.cuda.device_count())
-        except Exception as exc:
-            cuda["error"] = str(exc)
-
         return {
             "status": "OK",
-            "message": "Bud Step 3 worker is alive.",
+            "message": "Bud Step 3 v14 two-GPU worker is alive.",
             "step3_script": str(STEP3_SCRIPT),
             "step3_script_exists": STEP3_SCRIPT.is_file(),
             "cutie_repo": str(CUTIE_REPO),
@@ -339,7 +368,7 @@ def handle_job(event):
                 "AWS_DEFAULT_REGION": masked_env_status("AWS_DEFAULT_REGION"),
             },
             "boto3_credentials": boto3_credential_status(),
-            "cuda": cuda,
+            "cuda": cuda_status(),
         }
 
     run_id = str(event.get("id") if isinstance(event, dict) and event.get("id") else uuid.uuid4())[:36]
